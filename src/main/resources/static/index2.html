@@ -1,0 +1,53 @@
+<!--
+Interface Web que:
+- Captura áudio com MediaRecorder
+- Envia via WebSocket para o backend
+- Ao clicar em "Parar", envia sinal para transcrição e resposta
+- Reproduz a resposta de voz da IA ao receber
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <title>Ligação com IA</title>
+</head>
+<body>
+<h1>Simulador de Ligação com IA</h1>
+<button id="start">Começar</button>
+<button id="stop" disabled>Parar</button>
+
+<script>
+    let socket;
+    let recorder;
+
+    document.getElementById('start').onclick = async () => {
+        socket = new WebSocket("ws://localhost:8080/ws/voice");
+        socket.binaryType = "arraybuffer";
+
+        socket.onmessage = e => {
+            const audio = new Audio(URL.createObjectURL(new Blob([e.data], { type: 'audio/mpeg' })));
+            audio.play();
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+        recorder.ondataavailable = e => {
+            if (e.data.size > 0) socket.send(e.data);
+        };
+
+        recorder.onstop = () => socket.send("END");
+
+        recorder.start(200);
+        document.getElementById('start').disabled = true;
+        document.getElementById('stop').disabled = false;
+    };
+
+    document.getElementById('stop').onclick = () => {
+        recorder.stop();
+        document.getElementById('start').disabled = false;
+        document.getElementById('stop').disabled = true;
+    };
+</script>
+</body>
+</html>

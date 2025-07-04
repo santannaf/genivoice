@@ -1,10 +1,3 @@
-<!--
-Interface Web que:
-- Captura áudio com MediaRecorder
-- Envia via WebSocket para o backend
-- Ao clicar em "Parar", envia sinal para transcrição e resposta
-- Reproduz a resposta de voz da IA ao receber
--->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -17,30 +10,121 @@ Interface Web que:
 <button id="stop" disabled>Parar</button>
 
 <script>
+    const volumeSpeaks = 0.055;
+    let stopCount = 20;
     let socket;
     let recorder;
+    let sourceBuffer;
+    let mediaSource;
 
-    document.getElementById('start').onclick = async () => {
+    let statusSpeak = false;
+    let timeWithoutSpeech = 0;
+
+    async function start() {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        let audio;
+        const context = new AudioContext();
+        const source = context.createMediaStreamSource(stream);
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 2048;
+
+        source.connect(analyser);
+
+        const bufferAudio = new Float32Array(analyser.fftSize);
+
         socket = new WebSocket("ws://localhost:8080/ws/voice");
         socket.binaryType = "arraybuffer";
 
-        socket.onmessage = e => {
-            const audio = new Audio(URL.createObjectURL(new Blob([e.data], { type: 'audio/mpeg' })));
-            audio.play();
+        // socket.onmessage = e => {
+        //     if (audio != null) {
+        //         audio.pause();
+        //         audio.currentTime = 0;
+        //     }
+        //
+        //     audio = new Audio(URL.createObjectURL(new Blob([e.data], { type: 'audio/mpeg' })));
+        //     audio.play();
+        // };
+
+        socket.onmessage = (event) => {
+            if (!mediaSource) {
+                mediaSource = new MediaSource();
+                audio = new Audio();
+                audio.src = URL.createObjectURL(mediaSource);
+                audio.play();
+
+                mediaSource.addEventListener("sourceopen", () => {
+                    sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
+                });
+            }
+
+            // Quando o sourceBuffer estiver pronto e não em uso, adiciona o chunk
+            const appendChunk = () => {
+                if (sourceBuffer && !sourceBuffer.updating) {
+                    try {
+                        sourceBuffer.appendBuffer(new Uint8Array(event.data));
+                    } catch (e) {
+                        console.warn("⚠️ Erro ao anexar buffer:", e);
+                    }
+                } else {
+                    setTimeout(appendChunk, 50); // espera o buffer ficar livre
+                }
+            };
+
+            appendChunk();
         };
 
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-
-        recorder.ondataavailable = e => {
-            if (e.data.size > 0) socket.send(e.data);
+        socket.onerror = e => {
+            console.error("❌ Erro no WebSocket:", e);
         };
 
-        recorder.onstop = () => socket.send("END");
+        socket.onopen = e => {
+            console.log("🔌 Conectado ao WebSocket");
+            setInterval(() => {
+                analyser.getFloatTimeDomainData(bufferAudio);
 
-        recorder.start(200);
+                let volumeRMS = 0.0;
+
+                for (let i = 0; i < bufferAudio.length; i++) {
+                    volumeRMS += bufferAudio[i] * bufferAudio[i];
+                }
+
+                volumeRMS = Math.sqrt(volumeRMS / bufferAudio.length);
+
+                if ((volumeRMS > volumeSpeaks)) {
+                    timeWithoutSpeech = 0;
+
+                    if (!statusSpeak) {
+                        socket.send("START")
+                        recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+                        recorder.ondataavailable = e => {
+                            if (e.data.size > 0) socket.send(e.data);
+                        };
+
+                        recorder.onstop = () => socket.send("END");
+
+                        recorder.start(50);
+                        statusSpeak = true;
+                        console.log("🎙️ Falando...");
+                    }
+                } else if (timeWithoutSpeech < stopCount) {
+                    timeWithoutSpeech++;
+                } else if (statusSpeak) {
+                    statusSpeak = false;
+                    recorder.stop();
+                    console.log("🛑 Parando de falar...");
+                }
+            }, 20);
+        };
+    }
+
+
+
+    document.getElementById('start').onclick = async () => {
         document.getElementById('start').disabled = true;
         document.getElementById('stop').disabled = false;
+
+        await start();
     };
 
     document.getElementById('stop').onclick = () => {
