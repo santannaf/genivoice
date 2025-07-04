@@ -29,6 +29,7 @@ public class SpeechSynthesisService {
     }
 
     public Flux<byte[]> streamSynthesize(String text) {
-        return streamingSpeechModel.stream(text);
+        return streamingSpeechModel
+                .stream(text);
     }
 }

@@ -219,20 +219,20 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
             Mono.fromCallable(() -> transcriptionService.transcribe(filePath))
                     .doOnNext(transcribed -> {
                         long t2 = System.nanoTime();
-                        System.out.println("⏱️ Tempo de transcrição: " + formatTime(t1, t2));
+                        System.out.println("⏱️Tempo de transcrição: " + formatTime(t1, t2));
 
                         if (transcribed == null || transcribed.isBlank()) {
-                            System.out.println("⚠️ Nada transcrito.");
+                            System.out.println("⚠️Nada transcrito.");
                             throw new RuntimeException("Transcrição vazia");
                         }
 
-                        System.out.println("🎤 Usuário: " + transcribed);
+                        System.out.println("🎤Usuário: " + transcribed);
                     })
                     .flatMap(transcribed -> Mono.fromCallable(() -> chatService.generateResponse(transcribed))
                             .doOnNext(response -> {
                                 long t4 = System.nanoTime();
-                                System.out.println("🤖 IA: " + response);
-                                System.out.println("⏱️ Tempo de geração de resposta (GPT): " + formatTime(t1, t4));
+                                System.out.println("🤖IA: " + response);
+                                System.out.println("⏱️Tempo de geração de resposta (GPT): " + formatTime(t1, t4));
                             }))
                     .flatMapMany(response -> {
                         System.out.println("🗣️ Iniciando streaming de TTS...");
@@ -244,7 +244,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                                     try {
                                         session.sendMessage(msg);
                                     } catch (IOException e) {
-                                        System.err.println("❌ Erro ao enviar parte do áudio.");
+                                        System.err.println("❌Erro ao enviar parte do áudio.");
                                         e.printStackTrace();
                                     }
                                 })

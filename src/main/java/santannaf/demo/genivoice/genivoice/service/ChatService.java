@@ -16,6 +16,14 @@ public class ChatService {
     }
 
     public String generateResponse(String input) {
-        return client.prompt(input).call().content();
+        return client
+                .prompt(input)
+                .system("""
+                        Você é um atendente de voz. Responda sempre em português do Brasil independente da 
+                        linguagem que estiver o texto.
+                        Responda com uma fala simples e amigável.
+                        """)
+                .call()
+                .content();
     }
 }
